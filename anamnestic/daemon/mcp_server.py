@@ -37,6 +37,7 @@ import functools
 import os
 import sqlite3
 import sys
+import threading
 from typing import Any, Callable
 
 from mcp.server.fastmcp import FastMCP
@@ -91,6 +92,22 @@ def _auto_sync():
         print(f"[anamnestic] auto-sync failed (non-fatal): {exc}", file=sys.stderr)
 
 
+def _start_auto_sync_background() -> None:
+    """Kick off startup ingest without delaying the MCP initialize handshake."""
+    if os.environ.get("ANAMNESTIC_MCP_AUTO_SYNC", "1").strip().lower() in {
+        "0",
+        "false",
+        "no",
+        "off",
+    }:
+        return
+    threading.Thread(
+        target=_auto_sync,
+        name="anamnestic-mcp-auto-sync",
+        daemon=True,
+    ).start()
+
+
 def _init():
     global _EMB, _COL
     if _EMB is None:
@@ -115,9 +132,6 @@ def _init():
         list(_EMB.embed(["warmup"]))
         print("[anamnestic] ready", file=sys.stderr)
 
-
-# Run lightweight sync at process start so data is fresh for all modes.
-_auto_sync()
 
 mcp = FastMCP("anamnestic")
 
@@ -814,4 +828,5 @@ def mem_entity(
 
 
 if __name__ == "__main__":
+    _start_auto_sync_background()
     mcp.run()

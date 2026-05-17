@@ -15,7 +15,16 @@ def _env_bool(name: str, default: str = "1") -> bool:
 
 
 # --- Data roots ---
-DATA_DIR = Path(_expand_path(os.environ.get("ANAMNESTIC_DATA_DIR", "~/.claude-mem")))
+# Follow claude-mem's multi-profile data directory when anamnestic is not
+# explicitly configured. ANAMNESTIC_DATA_DIR remains the stronger override.
+DATA_DIR = Path(
+    _expand_path(
+        os.environ.get(
+            "ANAMNESTIC_DATA_DIR",
+            os.environ.get("CLAUDE_MEM_DATA_DIR", "~/.claude-mem"),
+        )
+    )
+)
 DB_PATH = str(DATA_DIR / "claude-mem.db")
 CHROMA_DIR = str(DATA_DIR / "semantic-chroma")
 FASTEMBED_CACHE = str(DATA_DIR / "fastembed-models")

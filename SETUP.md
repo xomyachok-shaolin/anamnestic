@@ -66,7 +66,9 @@
 
 ### Отношение к `claude-mem`
 
-`claude-mem` (плагин от thedotmack) создаёт базовую SQLite-схему и web-viewer; мы строим наш слой поверх его БД. Если пользуешься Claude Code — ставь его, получишь заодно живые хуки автозахвата. Если Claude Code нет, а нужен только Codex или другой клиент — можно пропустить установку плагина и создать базовую схему вручную (см. §3.1). Данные всё равно живут в `~/.claude-mem/` (имя директории — историческое, может быть переопределено через `ANAMNESTIC_DATA_DIR`).
+`claude-mem` (плагин от thedotmack) создаёт базовую SQLite-схему и web-viewer; мы строим наш слой поверх его БД. Если пользуешься Claude Code — ставь его, получишь заодно живые хуки автозахвата. Если Claude Code нет, а нужен только Codex или другой клиент — можно пропустить установку плагина и создать базовую схему вручную (см. §3.1).
+
+Актуальный `claude-mem` v13 добавил opt-in server-beta runtime на Postgres/Redis, но default worker-режим с SQLite остаётся совместимым. `anamnestic` работает именно с SQLite `claude-mem.db`. Для multi-profile установок `claude-mem` можно задавать `CLAUDE_MEM_DATA_DIR`; `anamnestic` автоматически использует его как data root, если не задан более сильный override `ANAMNESTIC_DATA_DIR`.
 
 ### Короткий маршрут
 
@@ -83,7 +85,8 @@
 
 ## 1. Предварительные требования
 
-- `python3 ≥ 3.10`, `git`, `curl`, `sqlite3`.
+- `python3 ≥ 3.11`, `git`, `curl`, `sqlite3`.
+- Node.js ≥ 20 и Bun нужны, если ставишь/запускаешь свежий `claude-mem`.
 - Хотя бы один CLI-агент, чьи сессии хочешь индексировать (Claude Code CLI `claude`, Codex CLI `codex`, или свой).
 - Свободное место: порядка 1% от суммарного размера jsonl плюс ~220 МБ модель и ~200 МБ на каждый бэкап.
 
@@ -118,10 +121,10 @@ uv --version
 ### 3.a — через плагин (Claude Code есть)
 
 ```bash
-npx -y claude-mem@latest install
+npx -y claude-mem install
 ```
 
-Создаст `~/.claude-mem/claude-mem.db` с базовой схемой, положит плагин в `~/.claude/plugins/marketplaces/thedotmack/`, пропишет хуки автозахвата в `~/.claude/settings.json`.
+Создаст `~/.claude-mem/claude-mem.db` с базовой схемой, положит плагин в `~/.claude/plugins/marketplaces/thedotmack/`, пропишет хуки автозахвата в `~/.claude/settings.json`. Если используешь отдельный профиль, сначала выставь `CLAUDE_MEM_DATA_DIR=/path/to/profile`.
 
 Опционально — запустить worker (web-viewer на `:37777`):
 
@@ -624,12 +627,15 @@ anamnestic sync
 
 | Variable | Default | Что делает |
 | --- | --- | --- |
-| `ANAMNESTIC_DATA_DIR` | `~/.claude-mem` | корень данных (БД + Chroma + venv + модель) |
+| `ANAMNESTIC_DATA_DIR` | `CLAUDE_MEM_DATA_DIR` или `~/.claude-mem` | корень данных (БД + Chroma + venv + модель); имеет приоритет над `CLAUDE_MEM_DATA_DIR` |
+| `CLAUDE_MEM_DATA_DIR` | `~/.claude-mem` | профиль данных `claude-mem`, который `anamnestic` подхватывает по умолчанию |
+| `ANAMNESTIC_PYTHON` | auto-detect | интерпретатор для `scripts/anamnestic.sh` и `scripts/mcp_server.sh` |
 | `ANAMNESTIC_CC_ROOT` | `~/.claude/projects` | источник Claude Code jsonl |
 | `ANAMNESTIC_CODEX_ROOT` | `~/.codex/sessions` | источник Codex jsonl |
 | `ANAMNESTIC_BACKUP_ROOT` | `~/anamnestic-backups` | куда бэкапить |
 | `ANAMNESTIC_BACKUP_KEEP_LAST` | `10` | ротация |
 | `ANAMNESTIC_SEMANTIC` | `auto` | `auto` использует Chroma/fastembed когда доступны; `0` отключает; `1` включает строгие semantic-проверки |
+| `ANAMNESTIC_MCP_AUTO_SYNC` | `1` | фоновый lightweight ingest при запуске MCP; `0` отключает |
 | `ANAMNESTIC_EMBED_MODEL` | `sentence-transformers/paraphrase-multilingual-MiniLM-L12-v2` | ONNX fastembed |
 | `ANAMNESTIC_CHROMA_COLLECTION` | `history_turns` | имя коллекции |
 

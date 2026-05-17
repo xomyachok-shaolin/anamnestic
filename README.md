@@ -4,7 +4,7 @@
 
 Собирает исторические транскрипты из **Claude Code** (main + sub-агенты), **Codex CLI** и **VS Code Copilot** в единый корпус. Даёт гибридный поиск (BM25 + семантика + темпоральный + граф сущностей → RRF-слияние) и отдаёт результаты обратно клиентам как MCP-инструменты.
 
-Построено как слой-расширение поверх [`claude-mem`](https://github.com/thedotmack/claude-mem): переиспользует его SQLite-файл как базовую схему и добавляет собственные таблицы, индексы и сервисы. Оба сосуществуют, не конфликтуя.
+Построено как слой-расширение поверх [`claude-mem`](https://github.com/thedotmack/claude-mem): переиспользует его SQLite-файл как базовую схему и добавляет собственные таблицы, индексы и сервисы. Оба сосуществуют, не конфликтуя. Если свежий `claude-mem` работает в multi-profile режиме через `CLAUDE_MEM_DATA_DIR`, `anamnestic` подхватывает тот же data root, пока явно не задан `ANAMNESTIC_DATA_DIR`.
 
 ```bash
 pip install anamnestic                  # один интерфейс, BM25/temporal/graph
@@ -97,7 +97,7 @@ ANAMNESTIC_SEMANTIC=1 anamnestic verify
 - **Turn — единица хранения.** `historical_turns` с UNIQUE-ключом `(content_session_id, turn_number)`; UPSERT не плодит дубликаты.
 - **Формат — ответственность парсера.** Добавить новый CLI-агент = написать парсер в `anamnestic/ingest/` и зарегистрировать glob.
 - **Каждая операция аудируется.** `anamnestic_audit` логирует sync/verify/backup/restore с длительностью и JSON-payload.
-- **Auto-sync при старте MCP.** Лёгкий ingest при запуске сервера; embedding выполняется scheduled/manual `sync`, чтобы native ONNX/Chroma не ломали MCP handshake.
+- **Auto-sync при старте MCP.** Лёгкий ingest запускается в фоне после старта процесса; embedding выполняется scheduled/manual `sync`, чтобы native ONNX/Chroma не ломали MCP handshake.
 
 ## Тесты
 

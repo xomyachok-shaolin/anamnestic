@@ -3,6 +3,28 @@
 Формат основан на [Keep a Changelog](https://keepachangelog.com/ru/1.1.0/).
 Проект придерживается [семантического версионирования](https://semver.org/lang/ru/).
 
+## [0.3.4] — 2026-05-18
+
+### Исправлено
+
+- MCP startup больше не блокируется lightweight auto-sync: ingest запускается
+  в фоне после старта процесса, поэтому клиент быстрее получает `initialize`.
+- Wrapper-скрипты `scripts/anamnestic.sh` и `scripts/mcp_server.sh` больше не
+  требуют локальную `.venv`: добавлен fallback на `ANAMNESTIC_PYTHON`,
+  `~/.claude-mem/semantic-env/bin/python`, `python3`, `python`.
+
+### Изменено
+
+- `CLAUDE_MEM_DATA_DIR` теперь используется как data root по умолчанию, если
+  не задан явный `ANAMNESTIC_DATA_DIR`. Это синхронизирует `anamnestic` с
+  multi-profile установками свежего `claude-mem`.
+- Документация обновлена под `claude-mem` v13: SQLite worker-режим остаётся
+  совместимым, server-beta на Postgres/Redis является opt-in.
+
+### Тесты
+
+- Добавлены тесты приоритета `ANAMNESTIC_DATA_DIR` над `CLAUDE_MEM_DATA_DIR`.
+
 ## [0.2.0] — 2026-04-18
 
 Первый версионированный релиз. Включает как базовую функциональность,
