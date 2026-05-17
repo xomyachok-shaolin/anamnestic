@@ -3,6 +3,7 @@ import io
 import os
 import sqlite3
 import sys
+import threading
 import unittest
 from types import ModuleType
 from unittest.mock import patch
@@ -200,6 +201,42 @@ class AutoSyncTests(unittest.TestCase):
         self.assertIn("Applying 999_test.sql", stderr.getvalue())
         self.assertIn("ingest progress", stderr.getvalue())
         self.assertIn("[anamnestic] auto-sync", stderr.getvalue())
+
+    def test_auto_sync_stdout_redirect_does_not_capture_other_threads(self):
+        import anamnestic.db as db
+        import anamnestic.ingest.incremental as incremental
+
+        entered = threading.Event()
+        release = threading.Event()
+
+        def noisy_migrations():
+            print("Applying 999_test.sql...")
+            entered.set()
+            self.assertTrue(release.wait(2), "auto-sync test release timed out")
+
+        def quiet_ingest(verbose=False):
+            return {"new": 0, "updated": 0}
+
+        stdout = io.StringIO()
+        stderr = io.StringIO()
+        with (
+            patch.object(db, "run_migrations", noisy_migrations),
+            patch.object(incremental, "run", quiet_ingest),
+            patch.dict(os.environ, {"ANAMNESTIC_MCP_AUTO_EMBED": "0"}),
+            contextlib.redirect_stdout(stdout),
+            contextlib.redirect_stderr(stderr),
+        ):
+            thread = threading.Thread(target=mcp_server._auto_sync)
+            thread.start()
+            self.assertTrue(entered.wait(2), "auto-sync test did not enter redirect")
+            print('{"jsonrpc":"2.0","id":1}')
+            release.set()
+            thread.join(2)
+
+        self.assertFalse(thread.is_alive())
+        self.assertIn('{"jsonrpc":"2.0","id":1}', stdout.getvalue())
+        self.assertNotIn("Applying 999_test.sql", stdout.getvalue())
+        self.assertIn("Applying 999_test.sql", stderr.getvalue())
 
 
 if __name__ == "__main__":

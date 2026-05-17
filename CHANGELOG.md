@@ -3,6 +3,18 @@
 Формат основан на [Keep a Changelog](https://keepachangelog.com/ru/1.1.0/).
 Проект придерживается [семантического версионирования](https://semver.org/lang/ru/).
 
+## [0.3.6] — 2026-05-18
+
+### Исправлено
+
+- MCP auto-sync теперь перенаправляет stdout CLI-хелперов только для своего
+  background thread, не подменяя stdout основного JSON-RPC транспорта.
+
+### Тесты
+
+- Добавлен regression-тест на гонку: пока auto-sync держит stdout redirect,
+  запись из другого thread остается в stdout и не уходит в stderr.
+
 ## [0.3.5] — 2026-05-18
 
 ### Исправлено

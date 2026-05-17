@@ -62,6 +62,41 @@ _EMB = None
 _COL = None
 
 
+class _ThreadStdoutProxy:
+    """Route stdout writes from one thread to a target, preserving others."""
+
+    def __init__(self, owner_ident: int, owner_stream, other_stream):
+        self._owner_ident = owner_ident
+        self._owner_stream = owner_stream
+        self._other_stream = other_stream
+
+    def _stream(self):
+        if threading.get_ident() == self._owner_ident:
+            return self._owner_stream
+        return self._other_stream
+
+    def write(self, text):
+        return self._stream().write(text)
+
+    def flush(self):
+        return self._stream().flush()
+
+    def __getattr__(self, name):
+        return getattr(self._other_stream, name)
+
+
+@contextlib.contextmanager
+def _redirect_current_thread_stdout(target):
+    original = sys.stdout
+    proxy = _ThreadStdoutProxy(threading.get_ident(), target, original)
+    sys.stdout = proxy
+    try:
+        yield
+    finally:
+        if sys.stdout is proxy:
+            sys.stdout = original
+
+
 def _auto_sync():
     """Lightweight incremental sync: ingest new files.
 
@@ -76,8 +111,8 @@ def _auto_sync():
     """
     try:
         # MCP stdio reserves stdout for JSON-RPC frames. Some lower-level CLI
-        # helpers still use print(), so force any incidental output to stderr.
-        with contextlib.redirect_stdout(sys.stderr):
+        # helpers still use print(); route only this auto-sync thread to stderr.
+        with _redirect_current_thread_stdout(sys.stderr):
             from anamnestic.db import run_migrations
             from anamnestic.ingest.incremental import run as ingest
 
