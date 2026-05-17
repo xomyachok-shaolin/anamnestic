@@ -1,3 +1,6 @@
+import contextlib
+import io
+import os
 import sqlite3
 import sys
 import unittest
@@ -168,6 +171,35 @@ class AuditTelemetryTests(unittest.TestCase):
         action, status, _ = _audit_log[0]
         self.assertEqual(action, "mcp.mem_search")
         self.assertEqual(status, "error")
+
+
+class AutoSyncTests(unittest.TestCase):
+    def test_auto_sync_redirects_helper_stdout_to_stderr(self):
+        import anamnestic.db as db
+        import anamnestic.ingest.incremental as incremental
+
+        def noisy_migrations():
+            print("Applying 999_test.sql...")
+
+        def noisy_ingest(verbose=False):
+            print("ingest progress")
+            return {"new": 1, "updated": 0}
+
+        stdout = io.StringIO()
+        stderr = io.StringIO()
+        with (
+            patch.object(db, "run_migrations", noisy_migrations),
+            patch.object(incremental, "run", noisy_ingest),
+            patch.dict(os.environ, {"ANAMNESTIC_MCP_AUTO_EMBED": "0"}),
+            contextlib.redirect_stdout(stdout),
+            contextlib.redirect_stderr(stderr),
+        ):
+            mcp_server._auto_sync()
+
+        self.assertEqual(stdout.getvalue(), "")
+        self.assertIn("Applying 999_test.sql", stderr.getvalue())
+        self.assertIn("ingest progress", stderr.getvalue())
+        self.assertIn("[anamnestic] auto-sync", stderr.getvalue())
 
 
 if __name__ == "__main__":

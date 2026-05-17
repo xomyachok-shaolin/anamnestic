@@ -33,6 +33,7 @@ Claude Code config (add to ~/.claude.json or via `claude mcp add`):
 """
 from __future__ import annotations
 
+import contextlib
 import functools
 import os
 import sqlite3
@@ -74,16 +75,19 @@ def _auto_sync():
     remains responsible for embedding by default.
     """
     try:
-        from anamnestic.db import run_migrations
-        from anamnestic.ingest.incremental import run as ingest
+        # MCP stdio reserves stdout for JSON-RPC frames. Some lower-level CLI
+        # helpers still use print(), so force any incidental output to stderr.
+        with contextlib.redirect_stdout(sys.stderr):
+            from anamnestic.db import run_migrations
+            from anamnestic.ingest.incremental import run as ingest
 
-        run_migrations()
-        ing = ingest(verbose=False)
-        emb = {"embedded": 0, "skipped": "mcp_startup_default"}
-        if os.environ.get("ANAMNESTIC_MCP_AUTO_EMBED", "0") == "1":
-            from anamnestic.indexers.incremental_chroma import run as embed
+            run_migrations()
+            ing = ingest(verbose=False)
+            emb = {"embedded": 0, "skipped": "mcp_startup_default"}
+            if os.environ.get("ANAMNESTIC_MCP_AUTO_EMBED", "0") == "1":
+                from anamnestic.indexers.incremental_chroma import run as embed
 
-            emb = embed(verbose=False, batch_size=64)
+                emb = embed(verbose=False, batch_size=64)
         total_new = ing.get("new", 0) + ing.get("updated", 0)
         if total_new > 0 or emb.get("embedded", 0) > 0:
             print(f"[anamnestic] auto-sync: ingested {total_new} new turns, "
