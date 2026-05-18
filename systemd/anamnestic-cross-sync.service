@@ -4,8 +4,7 @@ After=network-online.target
 
 [Service]
 Type=oneshot
-WorkingDirectory=%h/projects/anamnestic
-Environment=PYTHONPATH=%h/projects/anamnestic
+WorkingDirectory=%h
 # Peers default to ~/.claude-mem/peers.txt (one host per line, optional user@).
 # Override with: systemctl --user edit anamnestic-cross-sync.service
 #   [Service]

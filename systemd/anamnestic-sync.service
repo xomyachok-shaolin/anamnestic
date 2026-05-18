@@ -4,8 +4,7 @@ After=default.target
 
 [Service]
 Type=oneshot
-WorkingDirectory=%h/projects/anamnestic
-Environment=PYTHONPATH=%h/projects/anamnestic
+WorkingDirectory=%h
 ExecStart=%h/.claude-mem/semantic-env/bin/python -m anamnestic.cli sync
 
 # --- resource limits ---
@@ -21,7 +20,7 @@ IOSchedulingPriority=7
 
 # --- hardening ---
 ProtectSystem=strict
-ReadWritePaths=%h/.claude-mem %h/claude-mem-backups
+ReadWritePaths=%h/.claude-mem %h/anamnestic-backups
 PrivateTmp=yes
 NoNewPrivileges=yes
 

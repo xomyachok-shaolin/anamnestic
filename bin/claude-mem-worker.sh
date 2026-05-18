@@ -1,52 +1,45 @@
-#!/bin/bash
-# Supervisor wrapper for `claude-mem start`.
-#
-# claude-mem start spawns a Bun worker daemon and returns. systemd needs a
-# long-running foreground process to supervise; this script starts the worker,
-# then tails worker.pid so that systemd sees the service as alive for as long
-# as the actual worker process is alive. When the worker dies (or vanishes),
-# we exit 1 so that Restart=on-failure kicks in.
-set -eu
+#!/usr/bin/env bash
+# Foreground wrapper for the bundled claude-mem worker-service.cjs.
+set -euo pipefail
 
-# Resolve node/bun paths at start time so nvm upgrades don't require unit edits.
-nvm_bin=$(ls -d "$HOME"/.nvm/versions/node/v* 2>/dev/null | sort -V | tail -n1)/bin
-export PATH="$HOME/.bun/bin:$nvm_bin:$HOME/.local/share/pnpm:/usr/local/bin:/usr/bin:/bin"
-
-if ! command -v npx >/dev/null; then
-    echo "npx not found in PATH=$PATH" >&2
-    exit 1
+shopt -s nullglob
+node_bins=("$HOME"/.nvm/versions/node/v*/bin)
+if ((${#node_bins[@]} > 0)); then
+    newest_node_bin=$(printf '%s\n' "${node_bins[@]}" | sort -V | tail -n1)
+else
+    newest_node_bin=""
 fi
 
-# `claude-mem start` is idempotent: if a worker already runs, it no-ops.
-npx -y claude-mem start
+export PATH="$HOME/.bun/bin${newest_node_bin:+:$newest_node_bin}:$HOME/.local/share/pnpm:/usr/local/bin:/usr/bin:/bin"
 
-pid_file="$HOME/.claude-mem/worker.pid"
-# Give it up to 5s to materialize the pid file.
-for _ in 1 2 3 4 5; do
-    [ -f "$pid_file" ] && break
-    sleep 1
+if ! command -v bun >/dev/null 2>&1; then
+    echo "bun not found in PATH=$PATH" >&2
+    exit 127
+fi
+
+plugin_candidates=(
+    "${CLAUDE_MEM_PLUGIN_DIR:-}"
+    "$HOME/.claude/plugins/marketplaces/thedotmack/plugin"
+    "$HOME/.claude/plugins/cache/thedotmack/claude-mem/13.2.0"
+    "$HOME/.claude/plugins/cache/thedotmack/claude-mem/12.1.2"
+    "$HOME/.claude/plugins/cache/thedotmack/claude-mem/12.1.0"
+)
+
+plugin_dir=""
+for candidate in "${plugin_candidates[@]}"; do
+    if [[ -n "$candidate" && -f "$candidate/scripts/worker-service.cjs" ]]; then
+        plugin_dir=$(cd -P "$candidate" && pwd)
+        break
+    fi
 done
 
-if [ ! -f "$pid_file" ]; then
-    echo "worker.pid never appeared at $pid_file" >&2
+if [[ -z "$plugin_dir" ]]; then
+    echo "claude-mem plugin with scripts/worker-service.cjs not found" >&2
     exit 1
 fi
 
-# Extract pid via sed — avoids adding a Python dep on the hot path.
-pid=$(sed -n 's/.*"pid"[[:space:]]*:[[:space:]]*\([0-9]\+\).*/\1/p' "$pid_file" | head -n1)
-if [ -z "$pid" ]; then
-    echo "failed to parse pid from $pid_file (contents: $(cat "$pid_file"))" >&2
-    exit 1
-fi
+mkdir -p "$HOME/.claude-mem/logs"
+cd "$plugin_dir"
 
-echo "supervising worker pid=$pid"
-
-# Handle graceful shutdown: forward SIGTERM to the worker.
-trap 'kill -TERM "$pid" 2>/dev/null || true; exit 0' TERM INT
-
-while kill -0 "$pid" 2>/dev/null; do
-    sleep 10
-done
-
-echo "worker $pid exited; triggering service restart" >&2
-exit 1
+cmd="${1:-foreground}"
+exec bun scripts/worker-service.cjs "$cmd"

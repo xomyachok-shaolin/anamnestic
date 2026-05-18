@@ -7,8 +7,8 @@ StartLimitBurst=5
 [Service]
 Type=simple
 WorkingDirectory=%h
-ExecStart=%h/projects/anamnestic/bin/claude-mem-worker.sh
-ExecStop=/bin/bash -c 'nvm_bin=$(ls -d "$HOME"/.nvm/versions/node/v* 2>/dev/null | sort -V | tail -n1)/bin; export PATH="$HOME/.bun/bin:$nvm_bin:$PATH"; npx -y claude-mem stop || true'
+ExecStart=%h/projects/anamnestic/bin/claude-mem-worker.sh foreground
+ExecStop=%h/projects/anamnestic/bin/claude-mem-worker.sh stop
 Restart=on-failure
 RestartSec=10
 StandardOutput=append:%h/.claude-mem/logs/worker-stdout.log

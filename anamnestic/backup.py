@@ -1,7 +1,7 @@
 """Safe backup of SQLite + Chroma to a dated tarball.
 
 Uses SQLite .backup API (WAL-safe, online copy). Tars Chroma directory.
-Output: ~/claude-mem-backups/claude-mem-YYYYMMDD-HHMMSS.tar.gz
+Output: ~/anamnestic-backups/claude-mem-YYYYMMDD-HHMMSS.tar.gz
 """
 import os
 import shutil
