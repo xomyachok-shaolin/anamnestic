@@ -106,6 +106,17 @@ def cmd_sync(args):
     print(json.dumps(sync_result, ensure_ascii=False))
 
 
+def cmd_reindex(args):
+    from anamnestic.indexers.incremental_chroma import reindex
+    with audited("reindex") as details:
+        res = reindex(batch_size=args.batch, verbose=args.verbose)
+        details.update(res)
+        if "error" in res:
+            details["_status"] = "error"
+    print(json.dumps(res, ensure_ascii=False))
+    return 1 if "error" in res else 0
+
+
 def cmd_status(args):
     snapshot = _compute_status()
     print(json.dumps(snapshot, indent=2, ensure_ascii=False, default=str))
@@ -265,6 +276,11 @@ def build_parser():
         help="max turns to embed per sync run; 0 means unlimited",
     )
     s.set_defaults(func=cmd_sync)
+
+    rx = sub.add_parser("reindex", help="atomic full rebuild of the Chroma HNSW index (staging + swap)")
+    rx.add_argument("--verbose", action="store_true")
+    rx.add_argument("--batch", type=int, default=256)
+    rx.set_defaults(func=cmd_reindex)
 
     st = sub.add_parser("status", help="health + drift report + recent audit")
     st.set_defaults(func=cmd_status)
