@@ -55,6 +55,25 @@ from anamnestic.search.hybrid import (
     _semantic,
 )
 
+# Stored memory (turn/tool-output text) is attacker-influenceable content: a
+# prior session may have captured text that contains injected instructions.
+# Wrap it in an explicit, model-readable data fence so the agent treats it as
+# untrusted data rather than instructions (indirect prompt-injection defense).
+_UNTRUSTED_BEGIN = "<<<UNTRUSTED_MEMORY_BEGIN>>>"
+_UNTRUSTED_END = "<<<UNTRUSTED_MEMORY_END>>>"
+
+# Per-turn text cap for mem_get_turn (mirrors mem_search's snippet truncation)
+# plus a running total-size guard so a single call cannot return unbounded text.
+PER_TURN_CAP = 2000
+TOTAL_TEXT_CAP = 20000
+_ELISION = "… [truncated]"
+
+
+def _as_untrusted(text: str) -> str:
+    """Wrap agent-facing memory content in a data fence marking it untrusted."""
+    return f"{_UNTRUSTED_BEGIN}\n{text}\n{_UNTRUSTED_END}"
+
+
 # Preload heavy resources at module import: embedder (~220 MB model) + Chroma.
 # Done once per stdio process; subsequent tool calls are <100ms.
 _EMB = None
@@ -399,7 +418,7 @@ def mem_search(
             "source": h.meta.get("source", ""),
             "title": h.meta.get("title", ""),
             "project": h.meta.get("project", ""),
-            "snippet": (h.text or "")[:400],
+            "snippet": _as_untrusted((h.text or "")[:400]),
             "hit_type": getattr(h, "hit_type", "turn"),
         })
     resp: dict[str, Any] = {"query": query, "mode": mode, "total": len(out), "hits": out}
@@ -450,23 +469,38 @@ def mem_get_turn(turn_id: int, context: int = 2) -> dict[str, Any]:
     ).fetchone()
 
     conn.close()
+
+    turns: list[dict[str, Any]] = []
+    total = 0
+    for r in rows:
+        raw = r["text"] or ""
+        # Per-turn cap (mirrors mem_search snippet truncation) ...
+        if len(raw) > PER_TURN_CAP:
+            raw = raw[:PER_TURN_CAP] + _ELISION
+        # ... plus a running total-size guard so one call stays bounded.
+        if total >= TOTAL_TEXT_CAP:
+            raw = _ELISION
+        else:
+            remaining = TOTAL_TEXT_CAP - total
+            if len(raw) > remaining:
+                raw = raw[:remaining] + _ELISION
+            total += len(raw)
+        turns.append({
+            "id": r["id"],
+            "turn": r["turn_number"],
+            "role": r["role"],
+            "timestamp": r["timestamp"][:19] if r["timestamp"] else "",
+            "text": _as_untrusted(raw),
+            "is_target": r["turn_number"] == tn,
+        })
+
     return {
         "session": sid,
         "title": sess["custom_title"] if sess else "",
         "project": sess["project"] if sess else "",
         "source": sess["platform_source"] if sess else "",
         "target_turn": tn,
-        "turns": [
-            {
-                "id": r["id"],
-                "turn": r["turn_number"],
-                "role": r["role"],
-                "timestamp": r["timestamp"][:19] if r["timestamp"] else "",
-                "text": r["text"],
-                "is_target": r["turn_number"] == tn,
-            }
-            for r in rows
-        ],
+        "turns": turns,
     }
 
 
@@ -518,7 +552,7 @@ def mem_get_session(session_id: str, max_turns: int = 50) -> dict[str, Any]:
                 "turn": r["turn_number"],
                 "role": r["role"],
                 "timestamp": r["timestamp"][:19] if r["timestamp"] else "",
-                "snippet": r["snippet"],
+                "snippet": _as_untrusted(r["snippet"] or ""),
             }
             for r in turns
         ],
@@ -858,7 +892,7 @@ def mem_entity(
             "project": r["project"] or "",
             "title": r["custom_title"] or "",
             "source": r["platform_source"],
-            "snippet": r["snippet"],
+            "snippet": _as_untrusted(r["snippet"] or ""),
         }
         for r in rows
     ]
