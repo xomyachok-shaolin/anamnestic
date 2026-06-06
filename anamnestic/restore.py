@@ -10,12 +10,50 @@ Safety:
 """
 import os
 import shutil
+import sys
 import tarfile
 import tempfile
 import time
 from pathlib import Path
 
 from anamnestic.config import CHROMA_DIR, DB_PATH, DATA_DIR
+
+
+def _safe_extractall(tf: tarfile.TarFile, dest: Path) -> None:
+    """Extract a tarball, refusing members that would escape ``dest`` (zip-slip).
+
+    On Python 3.12+ this delegates to the stdlib ``data`` filter. On 3.11 (no
+    filter support) it rejects any member whose name is absolute or contains a
+    ``..`` component, and skips link members whose target escapes ``dest``.
+    Behavior is identical for benign archives.
+    """
+    if sys.version_info >= (3, 12):
+        tf.extractall(dest, filter="data")
+        return
+
+    dest = dest.resolve()
+    safe_members = []
+    for member in tf.getmembers():
+        name = member.name
+        # Reject absolute paths and any '..' traversal component.
+        if os.path.isabs(name) or name.startswith(("/", os.sep)):
+            raise RuntimeError(f"refusing unsafe tar member (absolute path): {name!r}")
+        parts = name.replace("\\", "/").split("/")
+        if ".." in parts:
+            raise RuntimeError(f"refusing unsafe tar member (path traversal): {name!r}")
+        # Reject symlinks/hardlinks whose target escapes the staging dir.
+        if member.islnk() or member.issym():
+            link = member.linkname
+            # symlink targets resolve relative to the link's own directory;
+            # hardlink names are relative to the archive root (dest).
+            base = (dest / Path(name).parent) if member.issym() else dest
+            resolved = (base / link).resolve()
+            if not (resolved == dest or dest in resolved.parents):
+                raise RuntimeError(
+                    f"refusing unsafe tar link member (escapes staging): {name!r} -> {link!r}"
+                )
+        safe_members.append(member)
+    tf.extractall(dest, members=safe_members)
 
 
 def run(tarball: str, force: bool = False) -> dict:
@@ -29,7 +67,7 @@ def run(tarball: str, force: bool = False) -> dict:
     with tempfile.TemporaryDirectory(dir=str(data_dir)) as staging:
         staging = Path(staging)
         with tarfile.open(tarball, "r:gz") as tf:
-            tf.extractall(staging)
+            _safe_extractall(tf, staging)
 
         src_db = staging / "claude-mem.db"
         src_chroma = staging / "semantic-chroma"
