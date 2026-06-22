@@ -20,3 +20,7 @@ config/secret_key
 build/
 dist/
 *.egg-info/
+
+# Local Claude Code tooling artifacts (skill-detect auto-generated, per-machine)
+.claude/
+CLAUDE.md
