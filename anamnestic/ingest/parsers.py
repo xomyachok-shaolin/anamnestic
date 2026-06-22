@@ -98,7 +98,7 @@ def parse_claude_jsonl(path: str | Path, is_subagent: bool = False) -> dict[str,
     slug = ""
 
     try:
-        with path.open() as handle:
+        with path.open(encoding="utf-8", errors="replace") as handle:
             for line in handle:
                 try:
                     obj = json.loads(line)
@@ -168,7 +168,7 @@ def parse_codex_jsonl(path: str | Path) -> dict[str, Any] | None:
     turns: list[tuple[str, str, str | None]] = []
 
     try:
-        with path.open() as handle:
+        with path.open(encoding="utf-8", errors="replace") as handle:
             for line in handle:
                 try:
                     obj = json.loads(line)
